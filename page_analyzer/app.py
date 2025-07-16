@@ -1,55 +1,73 @@
-import os
-from flask import Flask, render_template, request, redirect, flash, abort
-from psycopg2 import connect
+from flask import Flask, render_template, request, redirect, url_for, flash, abort
+from .url_repository import UrlRepository
+import psycopg2
 from psycopg2.extras import NamedTupleCursor
 from dotenv import load_dotenv
+import os
 
+load_dotenv()
 
 app = Flask(__name__)
-
-SECRET_KEY = os.getenv('SECRET_KEY')
-DATABASE_URL = os.getenv('DATABASE_URL')
-app.config.update(
-    SECRET_KEY=SECRET_KEY,
-    DATABASE_URL=DATABASE_URL
-)
+app.secret_key = os.getenv('SECRET_KEY')
 
 def get_db_connection():
-    conn = connect(DATABASE_URL)
-    return conn
+    return psycopg2.connect(
+        os.getenv('DATABASE_URL'),
+        cursor_factory=NamedTupleCursor
+    )
 
 @app.route('/')
 def index():
-    return render_template(
-        'index.html',
-    )
+    return render_template('index.html')
 
 @app.route('/urls', methods=['GET'])
-def get_urls():
+def urls():
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute('SELECT * FROM urls ORDER BY created_at DESC;')
-    urls = cur.fetchall()
-    cur.close()
+    repo = UrlRepository(conn)
+    urls_list = repo.get_all_urls()
     conn.close()
-    return render_template('urls.html', urls=urls)
+    return render_template('urls.html', urls=urls_list)
+
+@app.route('/urls', methods=['POST'])
+def add_url():
+    raw_url = request.form.get('url')
+    if not raw_url:
+        flash('URL обязателен', 'danger')
+        return render_template('index.html'), 422
+
+    conn = get_db_connection()
+    try:
+        repo = UrlRepository(conn)
+        is_added, url_id, message = repo.add_url(raw_url)  # Переименовал id в url_id
+        
+        if not url_id:  # Если url_id None (при ошибке)
+            flash(message, 'danger')
+            return render_template('index.html'), 422
+            
+        if is_added:
+            flash(message, 'success')
+        else:
+            flash(message, 'info')
+            
+        return redirect(url_for('show_url', id=url_id))  # Используем url_id
+        
+    except Exception as e:
+        flash(f"Произошла ошибка: {str(e)}", 'danger')
+        return render_template('index.html'), 500
+        
+    finally:
+        conn.close()
 
 @app.route('/urls/<int:id>')
-def urls_show(id):
+def show_url(id):
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=NamedTupleCursor)
-
-    cur.execute('SELECT * FROM urls WHERE id = %s;', (id,))
-    url = cur.fetchone()
-
-    if not url:
-        return abort(404)
-    
-    cur.close()
+    repo = UrlRepository(conn)
+    url = repo.find_by_id(id)
     conn.close()
 
+    if not url:
+        abort(404)
     return render_template('url.html', url=url)
-
 
 @app.errorhandler(404)
 def page_not_found(error):
