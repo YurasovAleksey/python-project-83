@@ -1,3 +1,4 @@
+import requests
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -41,16 +42,39 @@ class UrlRepository:
 
     def get_all_urls(self):
         with self.connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM urls ORDER BY created_at DESC")
+            cursor.execute("""
+                SELECT 
+                    urls.id,
+                    urls.name,
+                    urls.created_at,
+                    MAX(url_checks.created_at) as last_check_date,
+                    MAX(url_checks.status_code) as last_check_status
+                FROM urls
+                LEFT JOIN url_checks ON urls.id = url_checks.url_id
+                GROUP BY urls.id
+                ORDER BY urls.created_at DESC
+            """)
             return cursor.fetchall()
 
     def add_check(self, url_id):
         with self.connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
             try:
+                cursor.execute("SELECT name FROM urls WHERE id = %s", (url_id,))
+                url = cursor.fetchone()
+                if not url:
+                    return False, None, "URL не найден"
+                
+                try:
+                    response = requests.get(url.name, timeout=5)
+                    response.raise_for_status()
+                    status_code = response.status_code
+                except requests.exceptions.RequestException:
+                    return False, None, "Произошла ошибка при проверке"
+
                 cursor.execute(
-                    """INSERT INTO url_checks (url_id, created_at)
-                    VALUES (%s, %s) RETURNING id""",
-                    (url_id, datetime.now())
+                    """INSERT INTO url_checks (url_id, status_code, created_at)
+                    VALUES (%s, %s, %s) RETURNING id""",
+                    (url_id, status_code, datetime.now())
                 )
                 check_id = cursor.fetchone().id
                 self.connection.commit()
