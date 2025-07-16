@@ -63,12 +63,35 @@ def show_url(id):
     conn = get_db_connection()
     repo = UrlRepository(conn)
     url = repo.find_by_id(id)
-    conn.close()
 
     if not url:
         abort(404)
+    checks = repo.get_checks_url(id)
     messages = get_flashed_messages(with_categories=True)
-    return render_template('url.html', url=url, messages=messages)
+    return render_template(
+        'url.html',
+        url=url,
+        checks=checks,
+        messages=messages)
+
+@app.route('/urls/<int:id>/checks', methods=['POST'])
+def check_url(id):
+    conn = get_db_connection()
+    try:
+        repo = UrlRepository(conn)
+        success, check_id, message = repo.add_check(id)
+
+        if not success:
+            flash(message, 'danger')
+            return redirect(url_for('show_url', id=id))
+
+        flash("Страница успешно проверена", "success")
+        return redirect(url_for('show_url', id=id))
+    except Exception as e:
+        flash(f"Произошла ошибка при проверке: {str(e)}", "danger")
+        return redirect(url_for('show_url', id=id))
+    finally:
+        conn.close()
 
 @app.errorhandler(404)
 def page_not_found(error):
