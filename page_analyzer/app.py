@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, get_flashed_messages
 from .url_repository import UrlRepository
 import psycopg2
 from psycopg2.extras import NamedTupleCursor
@@ -38,9 +38,9 @@ def add_url():
     conn = get_db_connection()
     try:
         repo = UrlRepository(conn)
-        is_added, url_id, message = repo.add_url(raw_url)  # Переименовал id в url_id
+        is_added, url_id, message = repo.add_url(raw_url)
         
-        if not url_id:  # Если url_id None (при ошибке)
+        if not url_id:
             flash(message, 'danger')
             return render_template('index.html'), 422
             
@@ -49,7 +49,7 @@ def add_url():
         else:
             flash(message, 'info')
             
-        return redirect(url_for('show_url', id=url_id))  # Используем url_id
+        return redirect(url_for('show_url', id=url_id))
         
     except Exception as e:
         flash(f"Произошла ошибка: {str(e)}", 'danger')
@@ -67,7 +67,8 @@ def show_url(id):
 
     if not url:
         abort(404)
-    return render_template('url.html', url=url)
+    messages = get_flashed_messages(with_categories=True)
+    return render_template('url.html', url=url, messages=messages)
 
 @app.errorhandler(404)
 def page_not_found(error):
