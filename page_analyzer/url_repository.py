@@ -1,10 +1,10 @@
-import requests
 from datetime import datetime
 from urllib.parse import urlparse
 
 import psycopg2
-from psycopg2.extras import NamedTupleCursor
+import requests
 from bs4 import BeautifulSoup
+from psycopg2.extras import NamedTupleCursor
 from validators import url as validate_url
 
 
@@ -18,20 +18,25 @@ class UrlRepository:
                 parsed_url = self._normalize_url(raw_url)
                 if not self._is_valid_url(parsed_url):
                     return False, None, "Некорректный URL"
-                
-                cursor.execute("SELECT id FROM urls WHERE name = %s", (parsed_url,))
+
+                cursor.execute(
+                    "SELECT id FROM urls WHERE name = %s", (parsed_url,)
+                )
                 existing = cursor.fetchone()
                 if existing:
                     return False, existing.id, "Страница уже существует"
-                
+
                 cursor.execute(
-                    "INSERT INTO urls (name, created_at) VALUES (%s, %s) RETURNING id",
-                    (parsed_url, datetime.now())
+                    """
+                    INSERT INTO urls (name, created_at)
+                    VALUES (%s, %s) RETURNING id
+                    """,
+                    (parsed_url, datetime.now()),
                 )
                 url_id = cursor.fetchone().id
                 self.connection.commit()
                 return True, url_id, "Страница успешно добавлена"
-                
+
             except psycopg2.Error as e:
                 self.connection.rollback()
                 return False, None, f"Ошибка базы данных: {str(e)}"
@@ -64,21 +69,25 @@ class UrlRepository:
                 url = cursor.fetchone()
                 if not url:
                     return False, None, "URL не найден"
-                
+
                 try:
                     response = requests.get(url.name, timeout=5)
                     response.raise_for_status()
                     status_code = response.status_code
-                    soup = BeautifulSoup(response.text, 'html.parser')
+                    soup = BeautifulSoup(response.text, "html.parser")
 
-                    h1 = soup.find('h1')
-                    h1_content = h1.get_text().strip() if h1 else ''
+                    h1 = soup.find("h1")
+                    h1_content = h1.get_text().strip() if h1 else ""
 
-                    title = soup.find('title')
-                    title_content = title.get_text().strip() if title else ''
+                    title = soup.find("title")
+                    title_content = title.get_text().strip() if title else ""
 
-                    description = soup.find('meta', attrs={'name': 'description'})
-                    description_content = description['content'].strip() if description else ''
+                    description = soup.find(
+                        "meta", attrs={"name": "description"}
+                    )
+                    description_content = (
+                        description["content"].strip() if description else ""
+                    )
 
                 except requests.exceptions.RequestException:
                     return False, None, "Произошла ошибка при проверке"
@@ -97,9 +106,11 @@ class UrlRepository:
                         status_code,
                         h1_content[:255] if h1_content else None,
                         title_content[:255] if title_content else None,
-                        description_content[:255] if description_content else None,
-                        datetime.now()
-                    )
+                        description_content[:255]
+                        if description_content
+                        else None,
+                        datetime.now(),
+                    ),
                 )
                 check_id = cursor.fetchone().id
                 self.connection.commit()
@@ -107,10 +118,11 @@ class UrlRepository:
             except psycopg2.Error as e:
                 self.connection.rollback()
                 return False, None, f"Ошибка при добавлении проверки: {str(e)}"
-    
+
     def get_checks_url(self, url_id):
         with self.connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     id,
                     url_id,
@@ -119,11 +131,15 @@ class UrlRepository:
                     title,
                     description,
                     created_at,
-                    ROW_NUMBER() OVER (PARTITION BY url_id ORDER BY created_at) as local_id
+                    ROW_NUMBER() OVER
+                    (PARTITION BY url_id ORDER BY created_at)
+                    as local_id
                 FROM url_checks
                 WHERE url_id = %s
                 ORDER BY created_at DESC
-            """, (url_id,))
+            """,
+                (url_id,),
+            )
             return cursor.fetchall()
 
     def _normalize_url(self, raw_url):
@@ -133,6 +149,4 @@ class UrlRepository:
         return f"{parsed.scheme}://{parsed.netloc}"
 
     def _is_valid_url(self, url):
-        return (validate_url(url) and 
-                len(url) <= 255 and 
-                url.count('.') > 0)
+        return validate_url(url) and len(url) <= 255 and url.count(".") > 0
