@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-  {% if errors %}
-    {% for category, error in errors %}
+  {% if messages %}
+    {% for category, message in messages %}
       <div class="alert alert-{{ category }}" role="alert">
-        {{ error }}
+        {{ message }}
       </div>
     {% endfor %}
   {% endif %}
