@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 import psycopg2
 from psycopg2.extras import NamedTupleCursor
+from bs4 import BeautifulSoup
 from validators import url as validate_url
 
 
@@ -68,13 +69,37 @@ class UrlRepository:
                     response = requests.get(url.name, timeout=5)
                     response.raise_for_status()
                     status_code = response.status_code
+                    soup = BeautifulSoup(response.text, 'html.parser')
+
+                    h1 = soup.find('h1')
+                    h1_content = h1.get_text().strip() if h1 else ''
+
+                    title = soup.find('title')
+                    title_content = title.get_text().strip() if title else ''
+
+                    description = soup.find('meta', attrs={'name': 'description'})
+                    description_content = description['content'].strip() if description else ''
+
                 except requests.exceptions.RequestException:
                     return False, None, "Произошла ошибка при проверке"
 
                 cursor.execute(
-                    """INSERT INTO url_checks (url_id, status_code, created_at)
-                    VALUES (%s, %s, %s) RETURNING id""",
-                    (url_id, status_code, datetime.now())
+                    """INSERT INTO url_checks (
+                        url_id,
+                        status_code,
+                        h1,
+                        title,
+                        description,
+                        created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+                    (
+                        url_id,
+                        status_code,
+                        h1_content[:255] if h1_content else None,
+                        title_content[:255] if title_content else None,
+                        description_content[:255] if description_content else None,
+                        datetime.now()
+                    )
                 )
                 check_id = cursor.fetchone().id
                 self.connection.commit()
@@ -90,6 +115,9 @@ class UrlRepository:
                     id,
                     url_id,
                     status_code,
+                    h1,
+                    title,
+                    description,
                     created_at,
                     ROW_NUMBER() OVER (PARTITION BY url_id ORDER BY created_at) as local_id
                 FROM url_checks
