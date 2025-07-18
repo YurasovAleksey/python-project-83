@@ -4,7 +4,7 @@ authors = [
 ]
 name = "hexlet-code"
 version = "0.1.0"
-description = "Page analyzer project (github: "https://github.com/YurasovAleksey)"
+description = "Page analyzer project (github: https://github.com/YurasovAleksey)"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
