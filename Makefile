@@ -20,3 +20,11 @@ lint:
 
 lint-fix:
 	uv run ruff check --fix page_analyzer
+
+lint-format:
+	uv run ruff format page_analyzer
+
+test:
+	uv run pytest
+
+check: test lint
