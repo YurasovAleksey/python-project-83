@@ -23,8 +23,3 @@ lint-fix:
 
 lint-format:
 	uv run ruff format page_analyzer
-
-test:
-	uv run pytest
-
-check: test lint
