@@ -1,11 +1,10 @@
 from datetime import datetime
-from urllib.parse import urlparse
 
 import psycopg2
-import requests
-from bs4 import BeautifulSoup
 from psycopg2.extras import NamedTupleCursor
-from validators import url as validate_url
+
+from .parser import HtmlParser
+from .url_normalizer import UrlNormalizer
 
 
 class UrlRepository:
@@ -15,8 +14,8 @@ class UrlRepository:
     def add_url(self, raw_url):
         with self.connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
             try:
-                parsed_url = self._normalize_url(raw_url)
-                if not self._is_valid_url(parsed_url):
+                parsed_url = UrlNormalizer.normalize(raw_url)
+                if not UrlNormalizer.is_valid(parsed_url):
                     return False, None, "Некорректный URL"
 
                 cursor.execute(
@@ -70,26 +69,8 @@ class UrlRepository:
                 if not url:
                     return False, None, "URL не найден"
 
-                try:
-                    response = requests.get(url.name, timeout=5)
-                    response.raise_for_status()
-                    status_code = response.status_code
-                    soup = BeautifulSoup(response.text, "html.parser")
-
-                    h1 = soup.find("h1")
-                    h1_content = h1.get_text().strip() if h1 else ""
-
-                    title = soup.find("title")
-                    title_content = title.get_text().strip() if title else ""
-
-                    description = soup.find(
-                        "meta", attrs={"name": "description"}
-                    )
-                    description_content = (
-                        description["content"].strip() if description else ""
-                    )
-
-                except requests.exceptions.RequestException:
+                parsed_data = HtmlParser.parse(url.name)
+                if not parsed_data:
                     return False, None, "Произошла ошибка при проверке"
 
                 cursor.execute(
@@ -103,11 +84,13 @@ class UrlRepository:
                     ) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
                     (
                         url_id,
-                        status_code,
-                        h1_content[:255] if h1_content else None,
-                        title_content[:255] if title_content else None,
-                        description_content[:255]
-                        if description_content
+                        parsed_data["status_code"],
+                        parsed_data["h1"][:255] if parsed_data["h1"] else None,
+                        parsed_data["title"][:255]
+                        if parsed_data["title"]
+                        else None,
+                        parsed_data["description"][:255]
+                        if parsed_data["description"]
                         else None,
                         datetime.now(),
                     ),
@@ -141,12 +124,3 @@ class UrlRepository:
                 (url_id,),
             )
             return cursor.fetchall()
-
-    def _normalize_url(self, raw_url):
-        parsed = urlparse(raw_url)
-        if not parsed.scheme:
-            return f"https://{raw_url}"
-        return f"{parsed.scheme}://{parsed.netloc}"
-
-    def _is_valid_url(self, url):
-        return validate_url(url) and len(url) <= 255 and url.count(".") > 0

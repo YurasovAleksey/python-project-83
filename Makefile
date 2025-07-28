@@ -23,3 +23,11 @@ lint-fix:
 
 lint-format:
 	uv run ruff format page_analyzer
+
+test:
+	uv run pytest
+
+test-coverage:
+	uv run pytest --cov=gendiff --cov-report=xml tests/
+
+check: test lint
