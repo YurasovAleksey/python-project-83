@@ -54,7 +54,10 @@ def test_parse_missing_elements():
 
 
 def test_parse_request_exception():
-    with patch('requests.get', side_effect=RequestException("Connection error")):
+    with patch(
+        'requests.get',
+        side_effect=RequestException("Connection error")
+        ):
         result = HtmlParser.parse("http://example.com")
         assert result is None
 
