@@ -15,12 +15,11 @@ class UrlNormalizer:
         parsed = urlparse(raw_url)
 
         if not parsed.scheme:
-            return f"https://{raw_url}"
+            raw_url = f"https://{raw_url}"
+            parsed = urlparse(raw_url)
 
-        netloc = parsed.netloc
-        path = parsed.path.replace("//", "/") if parsed.path else ""
-
-        return f"{parsed.scheme}://{netloc}{path}"
+        normalized = f"{parsed.scheme}://{parsed.netloc}"
+        return normalized.rstrip('/')
 
     @staticmethod
     def is_valid(url):
